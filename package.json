@@ -16,7 +16,8 @@
     "build-client": "node tools/build-client.mjs",
     "dist:msi": "electron-vite build && electron-builder --win msi",
     "dist:portable": "electron-vite build && electron-builder --win portable",
-    "dist:all": "electron-vite build && electron-builder --win nsis msi portable"
+    "dist:all": "electron-vite build && electron-builder --win nsis msi portable",
+    "dist:linux": "electron-vite build && electron-builder --linux AppImage --publish never"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -75,6 +76,17 @@
     },
     "portable": {
       "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "publish": [],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "synopsis": "Launcher for a FINAL FANTASY XI private server"
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-x86_64.AppImage"
     }
   }
 }
