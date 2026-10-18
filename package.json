@@ -1,0 +1,80 @@
+{
+  "name": "xi-launcher",
+  "productName": "Goomba XI",
+  "version": "0.5.1",
+  "description": "Launcher for a LandSandBoat FFXI private server (Ashita v4 + xiloader)",
+  "main": "./out/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder --win nsis",
+    "manifest": "node tools/make-manifest.mjs",
+    "build-client": "node tools/build-client.mjs",
+    "dist:msi": "electron-vite build && electron-builder --win msi",
+    "dist:portable": "electron-vite build && electron-builder --win portable",
+    "dist:all": "electron-vite build && electron-builder --win nsis msi portable"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "yauzl": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/yauzl": "^2.10.3",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.7.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  },
+  "build": {
+    "appId": "com.example.goombaxi",
+    "productName": "Goomba XI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "launcher.config.json",
+        "to": "launcher.config.json"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "msi": {
+      "oneClick": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    }
+  }
+}

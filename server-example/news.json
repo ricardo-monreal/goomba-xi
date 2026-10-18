@@ -1,0 +1,13 @@
+[
+  {
+    "title": "Server maintenance this Saturday",
+    "date": "2026-10-17",
+    "body": "The server will be down from 09:00 to 11:00 UTC for a database update. The launcher will download a small patch afterwards.",
+    "url": "https://example.com/news/maintenance"
+  },
+  {
+    "title": "Welcome, adventurers!",
+    "date": "2026-10-12",
+    "body": "Make your character, pick up your starter gear from the Moogle, and say hi on Discord."
+  }
+]

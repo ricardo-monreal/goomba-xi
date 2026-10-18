@@ -1,0 +1,30 @@
+[
+  {
+    "id": "example-textures",
+    "name": "Example HD Textures",
+    "category": "Textures",
+    "description": "Replace with a real pack: a zip whose ROM/ROM2/... folders override the game's DATs.",
+    "author": "Pack author",
+    "links": {
+      "Website": "https://example.com/pack-homepage"
+    },
+    "url": "https://files.example.com/launcher/packs/example-textures-1.0.zip",
+    "size": 0,
+    "sha256": "",
+    "version": "1.0"
+  },
+  {
+    "id": "example-maps",
+    "name": "Example Maps",
+    "category": "Maps",
+    "url": "https://files.example.com/launcher/packs/example-maps-1.0.zip",
+    "version": "1.0"
+  },
+  {
+    "id": "example-ui",
+    "name": "Example UI",
+    "category": "UI",
+    "url": "https://files.example.com/launcher/packs/example-ui-1.0.zip",
+    "version": "1.0"
+  }
+]

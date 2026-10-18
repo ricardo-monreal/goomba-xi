@@ -1,0 +1,32 @@
+{
+  "clientMode": "bundled",
+  "clientLanguage": "US",
+  "serverId": "myserver",
+  "serverName": "Goomba XI",
+  "serverHost": "10.2.5.84",
+  "registerUrl": "http://10.2.5.84:8080/register",
+  "accountUrl": "http://10.2.5.84:8080/account",
+  "manifestUrl": "http://10.2.5.85/launcher/manifest.json",
+  "newsUrl": "http://10.2.5.85/launcher/news.json",
+  "links": {
+    "Website": "https://example.com",
+    "Discord": "https://discord.gg/your-invite"
+  },
+  "hairpin": true,
+  "ports": {},
+  "requiredPlugins": [
+    "thirdparty"
+  ],
+  "defaultPlugins": [
+    "thirdparty",
+    "screenshot"
+  ],
+  "requiredAddons": [],
+  "defaultAddons": [
+    "distance",
+    "fps",
+    "timestamp"
+  ],
+  "pivotCatalogUrl": "http://10.2.5.85/launcher/pivot.json",
+  "requiredOverlays": []
+}
