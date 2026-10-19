@@ -43,6 +43,19 @@ export interface LauncherConfig {
   /** Website pages. When set, "Create account" / "Manage account" open these in the browser. */
   registerUrl: string
   accountUrl: string
+  /** URL of an addons.json catalog of extra addons/plugins players can install. Empty string hides "Available". */
+  addonCatalogUrl: string
+  /** Linux only: the managed GE-Proton runtime. */
+  linux: LinuxConfig
+}
+
+export interface LinuxConfig {
+  /** GE-Proton release to use, e.g. "GE-Proton11-9". Empty = the latest release. */
+  protonVersion: string
+  /** Optional: download GE-Proton (.tar.gz) from your own server instead of GitHub. */
+  protonUrl: string
+  /** Optional: download umu-launcher (zipapp .tar) from your own server instead of GitHub. */
+  umuUrl: string
 }
 
 export type Language = 'US' | 'JP' | 'EU'
@@ -113,8 +126,19 @@ export interface PivotSettings {
 }
 
 /** Linux only: how the game is run through Wine. */
+export interface PrefixComponents {
+  /** Visual C++ 2015-2022 runtime (winetricks vcrun2022). Needed by xiloader, Ashita and plugins. */
+  vcrun: boolean
+  /** Windows GDI+ (winetricks gdiplus). Used by the game and addon interfaces. */
+  gdiplus: boolean
+  /** All fonts (winetricks allfonts). Large download. */
+  fonts: boolean
+}
+
 export interface WineSettings {
-  /** Path to a wine binary; empty = pick automatically. */
+  /** "managed": GE-Proton downloaded by the launcher and run with umu (recommended). "custom": a Wine/Proton build on this PC. */
+  runtime: 'managed' | 'custom'
+  /** Custom runtime: path to a wine binary or a Proton folder; empty = pick automatically. */
   runner: string
   /** Wine prefix folder; empty = <install folder>/wineprefix. */
   prefix: string
@@ -122,12 +146,32 @@ export interface WineSettings {
   debugLog: boolean
   /** Extra environment variables, one NAME=value per line (e.g. DXVK_HUD=fps). */
   extraEnv: string
+  /** Extra Windows components installed into the prefix with winetricks. */
+  components: PrefixComponents
+}
+
+export interface LinuxRuntimeStatus {
+  /** GE-Proton folder name if downloaded, e.g. "GE-Proton11-9". */
+  protonInstalled: string
+  umuInstalled: boolean
+  /** Folder of the Wine prefix and whether it exists yet. */
+  prefix: string
+  prefixExists: boolean
+  /** Components already installed in the prefix. */
+  componentsDone: string[]
+  /** Runtimes found on this PC (for the custom option). */
+  runners: WineRunner[]
 }
 
 export interface WineRunner {
+  /** wine binary, or umu-run for the managed GE-Proton runtime. */
   path: string
   label: string
   version: string
+  /** "umu": run through umu-launcher with PROTONPATH (managed GE-Proton, or a Proton folder). */
+  kind?: 'wine' | 'umu'
+  /** Proton folder used with umu. */
+  protonPath?: string
 }
 
 export interface UserSettings {
@@ -210,11 +254,46 @@ export interface AddonEntry {
   name: string
   enabled: boolean
   required: boolean
+  /** From the server's addons.json catalog, when listed there. */
+  version?: string
+  author?: string
+  description?: string
+  links?: Record<string, string>
+  /** Installed through the catalog (can be updated or removed from the launcher). */
+  fromCatalog?: boolean
+  updateAvailable?: boolean
+}
+
+/** One entry of the server's addons.json catalog. */
+export interface CatalogItem {
+  type: 'addon' | 'plugin'
+  /** Addon folder name / plugin DLL name without .dll. */
+  name: string
+  version?: string
+  author?: string
+  description?: string
+  links?: Record<string, string>
+  /** Zip download. Ashita layout (addons/, plugins/, …) or just the addon folder / DLL. */
+  url: string
+  size?: number
+  sha256?: string
+  /** Only show on these systems, e.g. ["linux"]. */
+  platforms?: ('windows' | 'linux')[]
+}
+
+export interface CatalogProgress {
+  key: string
+  phase: 'downloading' | 'extracting' | 'done' | 'error'
+  bytesDone: number
+  bytesTotal: number
 }
 
 export interface AddonList {
   addons: AddonEntry[]
   plugins: AddonEntry[]
+  /** Catalog entries that aren't installed yet. */
+  available: CatalogItem[]
+  catalogError?: string
 }
 
 /** One entry of the server's pivot.json catalog. */
@@ -295,6 +374,14 @@ export interface LauncherApi {
   pivotSetEnabled(id: string, enabled: boolean): Promise<PivotState>
   pivotAddLocal(): Promise<{ ok: boolean; error?: string }>
   onPivotProgress(cb: (p: PivotProgress) => void): () => void
+  /** Addon/plugin catalog. key = "addon:name" or "plugin:name". */
+  catalogInstall(key: string): Promise<{ ok: boolean; error?: string }>
+  catalogRemove(key: string): Promise<{ ok: boolean; error?: string }>
+  onCatalogProgress(cb: (p: CatalogProgress) => void): () => void
+  /** Linux: runtime + prefix status, set up now, or start over. */
+  linuxStatus(): Promise<LinuxRuntimeStatus>
+  linuxPrepare(): Promise<{ ok: boolean; error?: string }>
+  linuxRecreate(): Promise<{ ok: boolean; error?: string }>
   /** Linux: Wine builds found on this machine. */
   wineRunners(): Promise<WineRunner[]>
   /** Linux: pick a wine binary by hand. */

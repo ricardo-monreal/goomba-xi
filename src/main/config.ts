@@ -40,7 +40,9 @@ export function loadLauncherConfig(): LauncherConfig {
     allowAccountCreation: true,
     registerUrl: '',
     accountUrl: '',
-    ...raw
+    addonCatalogUrl: '',
+    ...raw,
+    linux: { protonVersion: '', protonUrl: '', umuUrl: '', ...(raw.linux ?? {}) }
   }
   if (!/^[A-Za-z0-9_-]+$/.test(cfg.serverId)) {
     throw new Error('launcher.config.json: serverId may only contain letters, digits, "-" and "_"')
@@ -101,7 +103,7 @@ function defaultSettings(): UserSettings {
     rememberMe: false,
     lastUsername: '',
     closeOnLaunch: false,
-    wine: { runner: '', prefix: '', debugLog: false, extraEnv: '' }
+    wine: { runtime: 'managed', runner: '', prefix: '', debugLog: false, extraEnv: '', components: { vcrun: true, gdiplus: true, fonts: false } }
   }
 }
 
@@ -139,7 +141,7 @@ function mergeSettings(base: UserSettings, patch: Partial<UserSettings>): UserSe
     graphics: { ...base.graphics, ...(patch.graphics ?? {}) },
     sound: { ...base.sound, ...(patch.sound ?? {}) },
     gamepad: mergeGamepad(base.gamepad, patch.gamepad ?? {}),
-    wine: { ...base.wine, ...(patch.wine ?? {}) },
+    wine: { ...base.wine, ...(patch.wine ?? {}), components: { ...base.wine.components, ...(patch.wine?.components ?? {}) } },
     addons: { ...base.addons, ...(patch.addons ?? {}) },
     plugins: { ...base.plugins, ...(patch.plugins ?? {}) },
     pivot: {

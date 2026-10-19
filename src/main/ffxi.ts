@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import type { FfxiStatus, Language, LauncherConfig, Prereqs, UserSettings } from '../shared/types'
 import { bundledPaths } from './ashita'
-import { findPath, pickRunner } from './wine'
+import { describeRunner, findPath } from './wine'
 
 // PlayOnline registry roots per region. xiloader reads these same keys to find
 // polcore, so a working retail install must have them.
@@ -63,7 +63,7 @@ export const VC_REDIST_URL = 'https://aka.ms/vs/17/release/vc_redist.x86.exe'
 
 /** xiloader is built with VS2022 and needs the x86 VC++ 14.3x+ runtime. */
 export async function checkPrereqs(s: UserSettings): Promise<Prereqs> {
-  if (process.platform !== 'win32') return { wine: await pickRunner(s.wine) }
+  if (process.platform !== 'win32') return { wine: await describeRunner(s.wine) }
   const key = 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86'
   const [installed, minor] = await Promise.all([regQuery(key, 'Installed'), regQuery(key, 'Minor')])
   if (installed === null) return { vcRedistX86: false }

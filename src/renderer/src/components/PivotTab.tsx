@@ -8,6 +8,7 @@ export default function PivotTab(): JSX.Element {
   const [progress, setProgress] = useState<Record<string, PivotProgress>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState('')
+  const [query, setQuery] = useState('')
 
   const reload = useCallback(async () => setState(await window.api.pivotList()), [])
 
@@ -46,18 +47,24 @@ export default function PivotTab(): JSX.Element {
     await reload()
   }
 
+  const matchPack = (p: PivotEntry): boolean => {
+    const q = query.trim().toLowerCase()
+    return !q || p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
+  }
+
   if (!state) return <p className="muted">Loading…</p>
 
   return (
     <div className="pivot">
-      <div className="toolbar">
-        <span className="muted small">
-          HD textures, maps and other DAT overrides powered by XIPivot. Only one pack can be enabled per category. Changes apply the next time you press Play.
-        </span>
-        <button onClick={browse} disabled={!state.available}>
+      <div className="lib-search">
+        <input placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button onClick={browse} disabled={!state.available} title="Add a DAT mod folder you already have">
           📁 Add a folder…
         </button>
       </div>
+      <span className="muted small">
+        HD textures, maps and other DAT overrides powered by XIPivot. Only one can be enabled per category. Changes apply the next time you press Play.
+      </span>
 
       {!state.available && (
         <div className="notice small">
@@ -68,12 +75,12 @@ export default function PivotTab(): JSX.Element {
       {notice && <div className="notice small">{notice}</div>}
       {state.packs.length === 0 && state.available && <p className="muted">No packs available yet. Use “Add a folder…” to use a DAT mod you already have.</p>}
 
-      {state.categories.map((cat) => (
+      {state.categories.filter((cat) => state.packs.some((p) => p.category === cat && matchPack(p))).map((cat) => (
         <section key={cat} className="pivot-cat">
           <h2>{cat}</h2>
           <div className="pack-grid">
             {state.packs
-              .filter((p) => p.category === cat)
+              .filter((p) => p.category === cat && matchPack(p))
               .map((p) => {
                 const prog = progress[p.id]
                 const pct = prog && prog.bytesTotal > 0 ? Math.floor((prog.bytesDone / prog.bytesTotal) * 100) : 0
@@ -114,21 +121,32 @@ export default function PivotTab(): JSX.Element {
 
                     <div className="pack-actions">
                       {p.source === 'catalog' && !p.installed && !prog && (
-                        <button onClick={() => install(p)} disabled={!state.available || !p.url}>
+                        <button className="btn-small" onClick={() => install(p)} disabled={!state.available || !p.url}>
                           ⤓ Download
                         </button>
                       )}
-                      {prog && <button onClick={() => window.api.pivotCancel(p.id)}>Cancel</button>}
+                      {prog && (
+                        <button className="btn-small" onClick={() => window.api.pivotCancel(p.id)}>
+                          Cancel
+                        </button>
+                      )}
                       {p.installed && !p.locked && !prog && (
                         <>
-                          {p.updateAvailable && <button onClick={() => install(p)}>Update</button>}
-                          <label className="switch" title={p.enabled ? 'Enabled' : 'Disabled'}>
-                            <input type="checkbox" checked={p.enabled} onChange={(e) => toggle(p, e.target.checked)} />
-                            <span />
-                          </label>
+                          {p.updateAvailable && (
+                            <button className="btn-small" onClick={() => install(p)}>
+                              Update
+                            </button>
+                          )}
                           <button className="icon-btn" title={p.source === 'local' ? 'Remove from list' : 'Delete'} onClick={() => remove(p)}>
                             ✕
                           </button>
+                          <input
+                            type="checkbox"
+                            aria-label={`Enable ${p.name}`}
+                            title={p.enabled ? 'Enabled' : 'Disabled'}
+                            checked={p.enabled}
+                            onChange={(e) => toggle(p, e.target.checked)}
+                          />
                         </>
                       )}
                       {p.locked && <span className="tag-pill">server</span>}

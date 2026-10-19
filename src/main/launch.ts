@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { LaunchResult, LauncherConfig, UserSettings } from '../shared/types'
 import { ashitaCli, ashitaDir, scanAddons, writeProfile, xiloaderPath } from './ashita'
 import { overlaysForLaunch } from './pivot'
-import { isWindows, pickRunner, preparePrefix, startWithWine } from './wine'
+import { isWindows, preparePrefix, resolveRunner, startWithWine } from './wine'
 
 // Credentials are handed to xiloader through a short-lived JSON file (xiloader --json)
 // instead of --user/--pass, so the password never appears in the process list.
@@ -79,12 +79,13 @@ export async function launchGame(
   if (!existsSync(ashitaCli(dir))) return { ok: false, error: 'Ashita is missing. Run the update first.' }
   if (!existsSync(xiloaderPath(dir))) return { ok: false, error: 'xiloader is missing. Run the update first.' }
 
-  // Linux: make sure Wine is available and its prefix is ready before writing anything.
+  // Linux: get the runtime (downloading GE-Proton the first time) and make sure the prefix is ready.
   let runner = null
   if (!isWindows) {
-    runner = await pickRunner(settings.wine)
-    if (!runner) {
-      return { ok: false, error: 'Wine was not found. Install Wine (e.g. sudo apt install wine) or GE-Proton, then try again. See Settings → Linux.' }
+    try {
+      runner = await resolveRunner(cfg.linux, settings.wine, onStatus)
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
     const prepError = await preparePrefix(runner, dir, settings.wine, onStatus)
     if (prepError) return { ok: false, error: prepError }
@@ -96,7 +97,7 @@ export async function launchGame(
   await writeProfile(dir, cfg, settings, list, { credentialsJson: creds, pivotOverlays: overlaysForLaunch(dir, cfg, settings) })
 
   // Windows: resolves once the UAC prompt is answered and Ashita has started (or failed to).
-  // Linux: Wine ignores Ashita's administrator request, so it is started directly.
+  // Linux: Wine/Proton ignores Ashita's administrator request, so it is started directly.
   const result = runner
     ? await startWithWine(runner, dir, settings.wine, ashitaCli(dir), [`${cfg.serverId}.ini`], ashitaDir(dir))
     : await startElevated(ashitaCli(dir), `${cfg.serverId}.ini`, ashitaDir(dir))

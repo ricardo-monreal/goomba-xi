@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # XI Launcher
 
 A HorizonXI-style launcher for a [LandSandBoat](https://github.com/LandSandBoat/server) private server, built with Electron + React.
@@ -11,7 +10,7 @@ What it does:
 - **Or uses the player's own retail install** (`clientMode: "retail"`), found through the PlayOnline registry key or a folder they pick.
 - **Patches everything** from a manifest on any static web host: gzip-compressed, content-addressed, SHA-256 verified, 8 parallel downloads, pause/resume, free-space check, "Verify game files" repair. Only changed files download on updates, and files you remove from the client get removed from players' machines.
 - **Signs in and launches** through Ashita v4 → xiloader → your login server. The password goes to xiloader via a short-lived `--json` file, so it never appears in the process list. "Remember me" stores it with the OS keychain (DPAPI on Windows).
-- **Manages addons/plugins** with toggles; you can mark some as required or on by default.
+- **Manages addons/plugins** with toggles; you can mark some as required or on by default, and publish an optional catalog players install extra addons and plugins from.
 - **Shows a news feed** and **game settings** (resolution, window mode, graphics, sound, gamepad), written into the Ashita boot profile's `[ffxi.registry]` section on every launch.
 
 ## 1. Configure it for your server
@@ -31,6 +30,8 @@ Edit `launcher.config.json`:
 | `hairpin` | Pass `--hairpin` to xiloader (only for a home-hosted server you also play on). |
 | `ports` | Optional `auth` / `data` / `view` port overrides if you changed LSB's defaults (54231 / 54230 / 54001). |
 | `requiredPlugins`, `defaultPlugins`, `requiredAddons`, `defaultAddons` | Addon policy. Required ones can't be turned off. |
+| `addonCatalogUrl` | URL of an `addons.json` listing optional addons and plugins players can install (see "Addon and plugin catalog"). Empty shows only what ships with the client. |
+| `linux` | Optional Linux runtime overrides: `protonVersion` (e.g. `"GE-Proton10-25"` to pin a version; empty = latest), `protonUrl` and `umuUrl` (host the GE-Proton `.tar.gz` and umu-launcher zipapp yourself, e.g. on your LAN file server). |
 | `pivotCatalogUrl` | URL of a `pivot.json` listing optional HD/DAT packs (see "Pivot: HD packs"). Empty hides the catalog. |
 | `verifyLogin` | `true` (default): Play first checks the username and password with the login server, so mistakes show in the launcher, then xiloader logs in automatically. |
 | `registerUrl` / `accountUrl` | Your website's sign-up page and account page (e.g. `https://example.com/register`, `https://example.com/account`). When set, **Create account** opens the website and a **My characters** link appears. |
@@ -179,21 +180,56 @@ Players can also click **Add a folder…** to use a DAT mod they already have. I
 
 Put custom server DATs in `overlay/Ashita/polplugins/DATs/<name>/ROM/...` and list `<name>` in `requiredOverlays`. They're delivered by the normal patcher, always enabled, and loaded first, so they win over cosmetic packs.
 
+## Addon and plugin catalog
+
+The **Addons** page lists what's installed (with on/off checkboxes) and, when you set `addonCatalogUrl`, an **Available** section with **Install** buttons. Host an `addons.json` next to `manifest.json` (see `server-example/addons.json`):
+
+```json
+[
+  {
+    "type": "plugin",
+    "name": "TargetLines",
+    "version": "1.0",
+    "author": "Plugin author",
+    "description": "Draws a line from you to your target.",
+    "links": { "Source": "https://github.com/..." },
+    "url": "http://10.2.5.85/launcher/addons/TargetLines-1.0.zip",
+    "sha256": "…"
+  }
+]
+```
+
+- **`type`**: `"plugin"` (Ashita `.dll`) or `"addon"` (Lua).
+- **`name`**: must match the plugin's `.dll` name or the addon's folder name, since that's what Ashita loads.
+- **`url`**: a zip in one of these layouts (a single wrapper folder is fine):
+  - Ashita layout: `plugins/TargetLines.dll`, `addons/<name>/<name>.lua`, `resources/…`, `docs/…`, merged into the player's `Ashita/` folder.
+  - Plugin: `TargetLines.dll` at the top, with any other folders (e.g. `resources/`) merged into `Ashita/`.
+  - Addon: `<name>.lua` at the top, or a `<name>/` folder containing it.
+- **`version`**: bump it to offer an **Update** button. **`sha256`** (recommended) rejects corrupted downloads. **`size`** (bytes) is shown before downloading.
+- **`platforms`**: `["linux"]` or `["windows"]` to offer an item on one OS only (e.g. a Wine fix plugin). Omit for both.
+
+Installed items are turned on automatically and can be removed with ✕. The launcher records what it copied in `Ashita/config/launcher-catalog.json`, so removing or updating never touches anything else. Addons and plugins that ship with the client can't be removed here; turn them off instead, or use `requiredPlugins`/`requiredAddons` to lock them on.
+
+To ship a plugin to everyone instead, put the `.dll` in `vendor/Ashita-v4beta/plugins/` (or your overlay) and republish the client.
+
 ## Linux and Steam Deck
 
-On Linux the launcher works the same way as on Windows: it installs, patches and signs players in. It starts Ashita, and through it xiloader and the game, with **Wine**.
+On Linux the launcher works the same way as on Windows: it installs, patches and signs players in, then starts Ashita, xiloader and the game with **GE-Proton**. Players don't need to install Wine, Proton or winetricks.
 
-**What players need:** a recent Wine (9.0 or newer is recommended), either from their distribution (`sudo apt install wine`, `sudo dnf install wine`), a Lutris runner, or GE-Proton or Proton from Steam. The launcher finds these automatically. Players can also pick one in **Settings → Linux**.
-
-**What the launcher does on first Play:**
-1. Creates a private Wine prefix in `<install folder>/wineprefix`.
-2. Installs the 32-bit Visual C++ runtime into it.
+**What the launcher does on first Play** (or **Settings → Linux → Set up now**):
+1. Downloads the latest **GE-Proton** release (about 500 MB, SHA-512 verified) and **umu-launcher** into `~/.local/share/<app>/runtimes/`. umu runs Proton inside the Steam Linux Runtime, like Steam does; its first start downloads that runtime too.
+2. Creates a private Wine prefix in `<install folder>/wineprefix` and installs the prefix components with winetricks through umu: **Visual C++ 2015-2022** (`vcrun2022`), **GDI+** (`gdiplus`), Windows 10 mode (`win10`), and optionally **all fonts** (`allfonts`). Finished components are remembered in `wineprefix/.xi-components.json`, so this happens once; newly ticked components are added on the next Play. Output goes to `wine-setup.log`.
 3. Starts Ashita with Linux paths converted to `Z:\...` paths.
 
-If Wine fails, the error from `wine.log` is shown in the launcher. **Settings → Linux** has:
-- an option to write a detailed log;
-- a button to open the log;
-- a box for extra environment variables, such as `DXVK_HUD=fps` or `MANGOHUD=1`.
+**Settings → Linux** has:
+- **Proton runtime:** GE-Proton (managed, recommended), Wine installed on the PC, any detected Wine/Proton build (Steam, Lutris, ProtonUp-Qt folders), or a custom wine binary or Proton folder. Custom Proton folders also run through umu.
+- **Logging:** Proton/Wine logging (`wine.log` in the install folder, plus `steam-default.log` in the home folder for Proton) and a button to open the last log.
+- **Game environment variables**, such as `DXVK_HUD=fps` or `MANGOHUD=1`.
+- **Prefix components** checkboxes, a custom prefix folder, **Set up now**, and **Recreate Linux environment** (deletes and rebuilds the default prefix; game files and settings are kept).
+
+**Requirements:** `python3` (for umu-launcher; preinstalled on nearly every distribution and on Steam Deck) and FUSE 2 for the AppImage. With a custom, non-umu Wine, the launcher uses the system `winetricks` (or downloads it) and needs `cabextract` for GDI+ and fonts. If winetricks fails, it falls back to setting Windows 10 mode and running Microsoft's VC++ installer directly.
+
+**Hosting GE-Proton yourself:** players' launchers download from GitHub by default. To serve it from your own file server instead, upload `GE-ProtonX-Y.tar.gz` and the umu-launcher `…zipapp.tar` and set `linux.protonUrl` / `linux.umuUrl` in `launcher.config.json`.
 
 ### Build the Linux version
 
@@ -212,8 +248,8 @@ The result is `dist/<productName>-<version>-x86_64.AppImage`, a single file that
 **Players run it like this:**
 
 ```bash
-chmod +x "Goomba Nation-0.5.0-x86_64.AppImage"
-./"Goomba Nation-0.5.0-x86_64.AppImage"
+chmod +x "Goomba Nation-0.6.0-x86_64.AppImage"
+./"Goomba Nation-0.6.0-x86_64.AppImage"
 ```
 
 - **Ubuntu 22.04 or newer:** AppImages need FUSE 2. Install it with `sudo apt install libfuse2t64` (24.04) or `sudo apt install libfuse2` (22.04).
@@ -222,9 +258,9 @@ chmod +x "Goomba Nation-0.5.0-x86_64.AppImage"
 ### Steam Deck
 
 1. Switch to Desktop Mode.
-2. Install **ProtonUp-Qt** from Discover, then use it to install **GE-Proton**.
-3. Download the AppImage, right-click it → Properties → Permissions → *Is executable*, and open it. Install the game and sign in as usual.
-4. For Game Mode, in Steam use *Add a Non-Steam Game* → choose the AppImage. In the shortcut's properties, **don't** force a compatibility tool, because the AppImage is a Linux program. Use a controller layout that maps the Deck controls as an Xbox gamepad, and turn the controller on in **Settings → Controller**.
+2. Download the AppImage, right-click it → Properties → Permissions → *Is executable*, and open it. Install the game and sign in as usual.
+3. Press **Play** once in Desktop Mode so the first-time setup (GE-Proton download and prefix components) finishes.
+4. For Game Mode, in Steam use *Add a Non-Steam Game* → choose the AppImage. In the shortcut's properties, **don't** force a compatibility tool, because the AppImage is a Linux program and brings its own Proton. Use a controller layout that maps the Deck controls as an Xbox gamepad, and turn the controller on in **Settings → Controller**.
 
 ## 4. Develop and package
 
@@ -276,7 +312,3 @@ tools/build-client.mjs   assembles the full Sandbox client from a retail install
 tools/make-manifest.mjs  publishes a client folder (manifest + gzip blobs)
 server-example/          sample news.json
 ```
-=======
-# goomba-xi
-A fan-run FFXI private server based on LandSandBoat
->>>>>>> c5ce36cbfc1bc67cceadcb0e68d14baae38df550

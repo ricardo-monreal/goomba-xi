@@ -11,17 +11,22 @@ export function Info({ text }: { text: string }): JSX.Element {
 interface ToggleRowProps {
   label: string
   info?: string
+  /** Optional second line under the label. */
+  sub?: ReactNode
   checked: boolean
   disabled?: boolean
   onChange: (v: boolean) => void
 }
 
-export function ToggleRow({ label, info, checked, disabled, onChange }: ToggleRowProps): JSX.Element {
+export function ToggleRow({ label, info, sub, checked, disabled, onChange }: ToggleRowProps): JSX.Element {
   return (
     <label className={disabled ? 'row toggle-row disabled' : 'row toggle-row'}>
-      <span className="row-label">
-        {label}
-        {info && <Info text={info} />}
+      <span className="row-text">
+        <span className="row-label">
+          {label}
+          {info && <Info text={info} />}
+        </span>
+        {sub && <span className="row-sub">{sub}</span>}
       </span>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
     </label>

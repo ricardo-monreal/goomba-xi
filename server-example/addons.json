@@ -1,0 +1,30 @@
+[
+  {
+    "type": "plugin",
+    "name": "TargetLines",
+    "version": "1.0",
+    "author": "Plugin author",
+    "description": "Draws a line from your character to your target.",
+    "links": {
+      "Source": "https://github.com/"
+    },
+    "url": "http://10.2.5.85/launcher/addons/TargetLines-1.0.zip"
+  },
+  {
+    "type": "addon",
+    "name": "minimap",
+    "version": "1.0",
+    "description": "Example Lua addon: put minimap/minimap.lua in the zip.",
+    "url": "http://10.2.5.85/launcher/addons/minimap-1.0.zip"
+  },
+  {
+    "type": "plugin",
+    "name": "WineFix",
+    "version": "1.0",
+    "description": "Example Linux-only plugin.",
+    "url": "http://10.2.5.85/launcher/addons/WineFix-1.0.zip",
+    "platforms": [
+      "linux"
+    ]
+  }
+]

@@ -10,9 +10,12 @@ import { checkPrereqs, detectFfxi } from './ffxi'
 import { cleanupCredentialFiles, launchGame } from './launch'
 import { CancelledError, checkForUpdates, runUpdate } from './patcher'
 import { addLocalOverlay, applyEnable, getCatalog, installPack, listPivot, removePack } from './pivot'
-import { findRunners, isWindows, wineLogPath } from './wine'
+import { catalogKey, getAddonCatalog, installItem, mergeCatalog, removeItem } from './catalog'
+import { findRunners, isWindows, linuxStatus, preparePrefix, recreatePrefix, resolveRunner, setRuntimeRoot, wineLogPath } from './wine'
 
 const config = loadLauncherConfig()
+// Big Linux runtimes (GE-Proton, umu) go to ~/.local/share/<app>/runtimes, not the settings folder.
+if (!isWindows) setRuntimeRoot(join(process.env.XDG_DATA_HOME || join(app.getPath('home'), '.local', 'share'), app.getName(), 'runtimes'))
 let win: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -120,9 +123,44 @@ ipcMain.handle('news:get', async (): Promise<NewsItem[]> => {
   }
 })
 
-ipcMain.handle('addons:list', () => {
+ipcMain.handle('addons:list', async () => {
   const s = loadSettings()
-  return scanAddons(s.installDir, config, s)
+  const catalog = await getAddonCatalog(config.addonCatalogUrl)
+  return mergeCatalog(s.installDir, scanAddons(s.installDir, config, s), catalog.items, catalog.error)
+})
+
+// ---- Addon / plugin catalog --------------------------------------------------------------------
+
+const catalogDownloads = new Map<string, AbortController>()
+
+ipcMain.handle('catalog:install', async (e, key: string) => {
+  const s = loadSettings()
+  const { items } = await getAddonCatalog(config.addonCatalogUrl, true)
+  const item = items.find((i) => catalogKey(i.type, i.name) === key)
+  if (!item) return { ok: false, error: 'That item is no longer in the list.' }
+  if (catalogDownloads.has(key)) return { ok: false, error: 'Already downloading.' }
+  const ac = new AbortController()
+  catalogDownloads.set(key, ac)
+  try {
+    await installItem(s.installDir, item, (p) => e.sender.send('catalog:progress', p), ac.signal)
+    // Turn it on right away.
+    const kind = item.type === 'addon' ? 'addons' : 'plugins'
+    saveSettings({ [kind]: { ...s[kind], [item.name]: true } })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    catalogDownloads.delete(key)
+  }
+})
+
+ipcMain.handle('catalog:remove', async (_e, key: string) => {
+  try {
+    await removeItem(loadSettings().installDir, key)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
 })
 
 ipcMain.handle('creds:get', () => {
@@ -158,6 +196,35 @@ ipcMain.handle('game:launch', async (_e, req: LaunchRequest) => {
 // ---- Linux / Wine ------------------------------------------------------------------------------
 
 ipcMain.handle('wine:runners', () => (isWindows ? [] : findRunners()))
+
+ipcMain.handle('linux:status', () => {
+  const s = loadSettings()
+  return linuxStatus(s.installDir, s.wine)
+})
+
+/** Download the runtime and set up the prefix now (instead of on the first Play). */
+async function prepareLinux(sender: Electron.WebContents) {
+  const s = loadSettings()
+  const status = (msg: string) => sender.send('launch:status', msg)
+  try {
+    const runner = await resolveRunner(config.linux, s.wine, status)
+    const err = await preparePrefix(runner, s.installDir, s.wine, status)
+    if (err) return { ok: false, error: err }
+    status('Linux environment ready.')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+ipcMain.handle('linux:prepare', (e) => prepareLinux(e.sender))
+
+ipcMain.handle('linux:recreate', async (e) => {
+  const s = loadSettings()
+  const err = await recreatePrefix(s.installDir, s.wine)
+  if (err) return { ok: false, error: err }
+  return prepareLinux(e.sender)
+})
 
 ipcMain.handle('wine:choose', async () => {
   const r = await dialog.showOpenDialog(win!, { title: 'Choose a wine binary (…/bin/wine)', properties: ['openFile', 'showHiddenFiles'] })

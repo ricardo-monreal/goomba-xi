@@ -73,7 +73,8 @@ export function scanAddons(installDir: string, cfg: LauncherConfig, settings: Us
 
   return {
     addons: addonNames.map((n) => entry(n, settings.addons, cfg.requiredAddons, cfg.defaultAddons)).sort(sort),
-    plugins: pluginNames.map((n) => entry(n, settings.plugins, cfg.requiredPlugins, cfg.defaultPlugins)).sort(sort)
+    plugins: pluginNames.map((n) => entry(n, settings.plugins, cfg.requiredPlugins, cfg.defaultPlugins)).sort(sort),
+    available: []
   }
 }
 

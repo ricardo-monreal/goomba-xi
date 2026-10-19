@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { LauncherApi, PatchProgress, PivotProgress } from '../shared/types'
+import type { CatalogProgress, LauncherApi, PatchProgress, PivotProgress } from '../shared/types'
 
 const api: LauncherApi = {
   getState: () => ipcRenderer.invoke('state:get'),
@@ -31,6 +31,16 @@ const api: LauncherApi = {
     ipcRenderer.on('pivot:progress', listener)
     return () => ipcRenderer.removeListener('pivot:progress', listener)
   },
+  catalogInstall: (key) => ipcRenderer.invoke('catalog:install', key),
+  catalogRemove: (key) => ipcRenderer.invoke('catalog:remove', key),
+  onCatalogProgress: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: CatalogProgress): void => cb(p)
+    ipcRenderer.on('catalog:progress', listener)
+    return () => ipcRenderer.removeListener('catalog:progress', listener)
+  },
+  linuxStatus: () => ipcRenderer.invoke('linux:status'),
+  linuxPrepare: () => ipcRenderer.invoke('linux:prepare'),
+  linuxRecreate: () => ipcRenderer.invoke('linux:recreate'),
   wineRunners: () => ipcRenderer.invoke('wine:runners'),
   chooseWineBinary: () => ipcRenderer.invoke('wine:choose'),
   openWineLog: () => ipcRenderer.invoke('wine:log'),

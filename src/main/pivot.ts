@@ -260,7 +260,7 @@ export async function extractZip(file: string, dest: string, onBytes: (n: number
     })
 }
 
-async function download(url: string, dest: string, onBytes: (done: number, total: number) => void, expectedSize = 0, sha256?: string, signal?: AbortSignal): Promise<void> {
+export async function download(url: string, dest: string, onBytes: (done: number, total: number) => void, expectedSize = 0, sha256?: string, signal?: AbortSignal): Promise<void> {
   const res = await fetch(url, { signal })
   if (!res.ok || !res.body) throw new Error(`Download failed: HTTP ${res.status}`)
   const total = Number(res.headers.get('content-length')) || expectedSize
@@ -279,7 +279,7 @@ async function download(url: string, dest: string, onBytes: (done: number, total
 }
 
 /** Removes a pack folder. Junctions/symlinks are unlinked, never followed. */
-async function removeDir(path: string): Promise<void> {
+export async function removeDir(path: string): Promise<void> {
   let st
   try {
     st = lstatSync(path)
