@@ -7,9 +7,9 @@
 //
 // Zip layouts accepted:
 //   - Ashita layout: plugins/<Name>.dll, addons/<name>/<name>.lua, resources/…, docs/… (merged into Ashita/)
-//   - Plugin: <Name>.dll at the top (any other folders are merged into Ashita/)
-//   - Addon: <name>.lua at the top, or <name>/<name>.lua
-// A single wrapping folder (e.g. "TargetLines-1.0/") is skipped automatically.
+//   - Plugin: <Name>.dll (plus resources/ or docs/ next to it)
+//   - Addon: <name>.lua, or <name>/<name>.lua
+// The item can be nested up to 5 folders deep (e.g. "TargetLines-1.0/release/TargetLines.dll").
 //
 // What was installed is recorded in Ashita/config/launcher-catalog.json so it can be updated or removed.
 
@@ -148,17 +148,48 @@ function walk(dir: string): string[] {
   return out
 }
 
-/** Works out where each top-level item of the unpacked zip goes inside Ashita/. Returns [source, destination] pairs. */
-export function planCopy(root: string, item: CatalogItem): [string, string][] {
-  let dir = root
-  // Skip one wrapping folder ("TargetLines-1.0/") when that's all there is.
-  for (let i = 0; i < 2; i++) {
+/** Finds the folder inside the unpacked zip that holds the item, however deeply it's nested. */
+function findRoot(root: string, item: CatalogItem): string | null {
+  const lower = (x: string): string => x.toLowerCase()
+  const name = lower(item.name)
+  const queue: [string, number][] = [[root, 0]]
+  let anyDll: string | null = null
+  while (queue.length) {
+    const [dir, depth] = queue.shift()!
     const { files, dirs } = entries(dir)
-    const isAshita = dirs.some((d) => ASHITA_DIRS.has(d.toLowerCase()))
-    const isAddonFolder = item.type === 'addon' && dirs.some((d) => d.toLowerCase() === item.name.toLowerCase())
-    if (files.length === 0 && dirs.length === 1 && !isAshita && !isAddonFolder) dir = join(dir, dirs[0])
-    else break
+    const lf = files.map(lower)
+    const ld = dirs.map(lower)
+    // Ashita layout: a plugins/ folder with the dll, or addons/<name>/
+    if (item.type === 'plugin' && ld.includes('plugins')) {
+      const pd = join(dir, dirs[ld.indexOf('plugins')])
+      if (entries(pd).files.some((f) => /\.dll$/i.test(f))) return dir
+    }
+    if (item.type === 'addon' && ld.includes('addons') && existsSync(join(dir, dirs[ld.indexOf('addons')], item.name))) return dir
+    if (item.type === 'plugin' && lf.includes(`${name}.dll`)) return dir
+    if (item.type === 'plugin' && !anyDll && lf.some((f) => f.endsWith('.dll'))) anyDll = dir
+    if (item.type === 'addon' && lf.includes(`${name}.lua`)) return dir
+    if (item.type === 'addon' && ld.includes(name) && existsSync(join(dir, dirs[ld.indexOf(name)], `${item.name}.lua`))) return dir
+    if (depth < 5) for (const d of dirs) queue.push([join(dir, d), depth + 1])
   }
+  return anyDll
+}
+
+/** Explains what's in a zip that has no usable plugin/addon (e.g. GitHub's source-code download). */
+function describeMissing(root: string, item: CatalogItem): string {
+  const all = walk(root).map((f) => f.toLowerCase())
+  const source = all.some((f) => /\.(cpp|h|hpp|sln|vcxproj)$/.test(f))
+  const what = item.type === 'plugin' ? `${item.name}.dll` : `${item.name}.lua`
+  if (item.type === 'plugin' && source)
+    return `The download for ${item.name} is source code, not a built plugin: it has no ${what}. Use the release zip (or build the .dll) and host that instead.`
+  if (item.type === 'plugin' && all.some((f) => f.endsWith('.lua')))
+    return `The download for ${item.name} contains Lua files but no .dll. It's probably an addon: set "type": "addon" in addons.json.`
+  return `The download for ${item.name} doesn't contain ${what}.`
+}
+
+/** Works out where each item of the unpacked zip goes inside Ashita/. Returns [source, destination] pairs. */
+export function planCopy(root: string, item: CatalogItem): [string, string][] {
+  const dir = findRoot(root, item)
+  if (!dir) throw new Error(describeMissing(root, item))
   const { files, dirs } = entries(dir)
   const lower = (s: string): string => s.toLowerCase()
   const plan: [string, string][] = []
@@ -170,10 +201,8 @@ export function planCopy(root: string, item: CatalogItem): [string, string][] {
   }
 
   if (item.type === 'plugin') {
-    const dlls = files.filter((f) => /\.dll$/i.test(f))
-    if (!dlls.length) throw new Error(`The download for ${item.name} doesn't contain a .dll file.`)
-    for (const f of dlls) plan.push([join(dir, f), join('plugins', f)])
-    for (const d of dirs) plan.push([join(dir, d), d]) // e.g. resources/ next to the dll
+    for (const f of files.filter((f) => /\.dll$/i.test(f))) plan.push([join(dir, f), join('plugins', f)])
+    for (const d of dirs) if (lower(d) === 'resources' || lower(d) === 'docs') plan.push([join(dir, d), lower(d)])
     return plan
   }
 
@@ -182,12 +211,9 @@ export function planCopy(root: string, item: CatalogItem): [string, string][] {
     plan.push([dir, join('addons', item.name)])
     return plan
   }
-  const folder = dirs.find((d) => lower(d) === lower(item.name))
-  if (folder && existsSync(join(dir, folder, `${item.name}.lua`))) {
-    plan.push([join(dir, folder), join('addons', item.name)])
-    return plan
-  }
-  throw new Error(`The download for ${item.name} doesn't contain ${item.name}.lua.`)
+  const folder = dirs.find((d) => lower(d) === lower(item.name))!
+  plan.push([join(dir, folder), join('addons', item.name)])
+  return plan
 }
 
 export async function installItem(installDir: string, item: CatalogItem, onProgress: (p: CatalogProgress) => void, signal?: AbortSignal): Promise<void> {

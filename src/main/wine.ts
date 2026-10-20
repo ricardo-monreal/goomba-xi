@@ -13,7 +13,7 @@
 
 import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, createReadStream, createWriteStream, existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, createReadStream, createWriteStream, existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, delimiter, dirname, join, sep } from 'node:path'
@@ -189,9 +189,13 @@ const UMU_REPO = 'Open-Wine-Components/umu-launcher'
 const umuPath = (): string => join(runtimeRoot, 'umu', 'umu-run')
 
 /** GE-Proton folders already downloaded, newest first. */
+// GE-Proton now publishes ARM builds ("GE-Proton11-11-aarch64") next to the normal x86_64 ones.
+const ARM_RE = /aarch64|arm64/i
+const rightArch = (name: string): boolean => (process.arch === 'arm64' ? ARM_RE.test(name) : !ARM_RE.test(name))
+
 export function installedProtons(): string[] {
   return subdirs(runtimeRoot)
-    .filter((d) => /^GE-Proton/i.test(d) && isFile(join(runtimeRoot, d, 'proton')))
+    .filter((d) => /^GE-Proton/i.test(d) && rightArch(d) && isFile(join(runtimeRoot, d, 'proton')))
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
 }
 
@@ -215,6 +219,8 @@ const pct = (done: number, total: number): string => (total > 0 ? ` ${Math.floor
 /** Downloads GE-Proton if needed. Returns its folder. */
 export async function ensureProton(cfg: LinuxConfig, onStatus: (msg: string) => void): Promise<string> {
   await mkdir(runtimeRoot, { recursive: true })
+  // Clean up builds for the wrong CPU (an earlier version could download the ARM build by mistake).
+  for (const d of subdirs(runtimeRoot)) if (/^GE-Proton/i.test(d) && !rightArch(d)) await rm(join(runtimeRoot, d), { recursive: true, force: true })
   const wanted = cfg.protonVersion.trim()
   if (wanted && isFile(join(runtimeRoot, wanted, 'proton'))) return join(runtimeRoot, wanted)
   if (!wanted && !cfg.protonUrl) {
@@ -229,16 +235,19 @@ export async function ensureProton(cfg: LinuxConfig, onStatus: (msg: string) => 
   if (cfg.protonUrl) {
     url = cfg.protonUrl
     name = basename(new URL(url).pathname).replace(/\.tar\.(gz|xz|zst)$/i, '')
+    if (!rightArch(name)) throw new Error(`linux.protonUrl points to ${name}, which is for a different CPU than this PC (${process.arch}).`)
     if (isFile(join(runtimeRoot, name, 'proton'))) return join(runtimeRoot, name)
   } else {
     onStatus('Looking up GE-Proton…')
     const rel = await githubRelease(GE_REPO, wanted)
-    const tar = rel.assets.find((a) => /\.tar\.gz$/i.test(a.name))
-    if (!tar) throw new Error(`No GE-Proton download found in release ${rel.tag}.`)
+    const tars = rel.assets.filter((a) => /\.tar\.gz$/i.test(a.name) && rightArch(a.name))
+    // Prefer the plain "<tag>.tar.gz" build.
+    const tar = tars.find((a) => a.name === `${rel.tag}.tar.gz`) ?? tars[0]
+    if (!tar) throw new Error(`No GE-Proton download for this PC (${process.arch}) found in release ${rel.tag}.`)
     url = tar.url
     size = tar.size
     name = tar.name.replace(/\.tar\.gz$/i, '')
-    checksumUrl = rel.assets.find((a) => /\.sha512sum$/i.test(a.name))?.url ?? ''
+    checksumUrl = rel.assets.find((a) => a.name === `${name}.sha512sum`)?.url ?? ''
   }
 
   const dl = join(runtimeRoot, '.downloads')
@@ -380,17 +389,77 @@ function runInPrefix(runner: WineRunner, prefix: string, w: WineSettings, args: 
 const COMPONENT_VERBS: Record<keyof PrefixComponents, string> = { vcrun: 'vcrun2022', gdiplus: 'gdiplus', fonts: 'allfonts' }
 const DONE_FILE = '.xi-components.json'
 
-function doneComponents(prefix: string): string[] {
+function recorded(prefix: string): string[] {
   try {
-    return JSON.parse(readFileSync(join(prefix, DONE_FILE), 'utf8'))
+    const v = JSON.parse(readFileSync(join(prefix, DONE_FILE), 'utf8'))
+    return Array.isArray(v) ? v : []
   } catch {
     return []
   }
 }
 
-function markDone(prefix: string, verbs: string[]): void {
-  const all = [...new Set([...doneComponents(prefix), ...verbs])]
+/** The Wine prefix root (Proton keeps it in a "pfx" folder). */
+function prefixRoot(prefix: string): string {
+  return !existsSync(join(prefix, 'system.reg')) && existsSync(join(prefix, 'pfx', 'system.reg')) ? join(prefix, 'pfx') : prefix
+}
+
+function readText(p: string): string {
+  try {
+    return readFileSync(p, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** A real Microsoft DLL, not Wine's built-in stand-in (those contain "Wine placeholder DLL" / "Wine builtin DLL"). */
+function isNativeDll(p: string): boolean {
+  try {
+    const b = readFileSync(p)
+    return b.length > 0 && !b.includes('Wine placeholder DLL') && !b.includes('Wine builtin DLL')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Checks the prefix itself for each component instead of trusting exit codes
+ * (umu-run can report success even when Proton failed to start).
+ */
+export function verifyComponent(prefix: string, verb: string): boolean {
+  const root = prefixRoot(prefix)
+  const userReg = readText(join(root, 'user.reg'))
+  const sysReg = readText(join(root, 'system.reg'))
+  // 32-bit DLLs live in syswow64 in a 64-bit prefix, in system32 in a 32-bit one.
+  const dll32 = (n: string): string =>
+    existsSync(join(root, 'drive_c', 'windows', 'syswow64')) ? join(root, 'drive_c', 'windows', 'syswow64', n) : join(root, 'drive_c', 'windows', 'system32', n)
+  switch (verb) {
+    case 'win10':
+      return /"Version"="win10"/i.test(userReg) || /"CurrentBuildNumber"="(1\d{4}|2\d{4})"/.test(sysReg)
+    case 'vcrun2022':
+      return isNativeDll(dll32('vcruntime140.dll')) && isNativeDll(dll32('msvcp140.dll'))
+    case 'gdiplus':
+      return isNativeDll(dll32('gdiplus.dll'))
+    case 'allfonts': {
+      try {
+        return readdirSync(join(root, 'drive_c', 'windows', 'Fonts')).filter((f) => /\.tt[fc]$/i.test(f)).length > 40
+      } catch {
+        return false
+      }
+    }
+    default:
+      return recorded(prefix).includes(verb)
+  }
+}
+
+/** Components that are really installed in the prefix. */
+function doneComponents(prefix: string): string[] {
+  return [...new Set([...recorded(prefix), 'win10', 'vcrun2022', 'gdiplus', 'allfonts'])].filter((v) => verifyComponent(prefix, v))
+}
+
+function saveDone(prefix: string): string[] {
+  const all = doneComponents(prefix)
   writeFileSync(join(prefix, DONE_FILE), JSON.stringify(all))
+  return all
 }
 
 /** winetricks for custom Wine: the system one, or a copy downloaded into the runtime folder. */
@@ -448,14 +517,14 @@ export async function preparePrefix(runner: WineRunner, installDir: string, w: W
   const done = doneComponents(prefix)
   const wanted = ['win10', ...Object.entries(w.components).filter(([, on]) => on).map(([k]) => COMPONENT_VERBS[k as keyof PrefixComponents])]
   let todo = wanted.filter((v) => !done.includes(v))
-  const firstTime = !existsSync(join(prefix, 'system.reg'))
+  const firstTime = !existsSync(join(prefixRoot(prefix), 'system.reg'))
 
   if (runner.kind !== 'umu' && firstTime) {
     onStatus('Setting up Wine for the first time… (about a minute)')
     const r = await runInPrefix(runner, prefix, w, ['wineboot', '--init'], log, 300_000)
     const server = join(dirname(runner.path), 'wineserver')
     if (isFile(server)) await run(server, ['-w'], baseEnv(runner, prefix, w), { timeoutMs: 120_000 })
-    if (!existsSync(join(prefix, 'system.reg'))) return `Wine couldn't create its settings folder (${prefix}). ${lastLines(r.out)} See ${log}`
+    if (!existsSync(join(prefixRoot(prefix), 'system.reg'))) return `Wine couldn't create its settings folder (${prefix}). ${lastLines(r.out)} See ${log}`
   }
   if (!todo.length) return null
 
@@ -476,27 +545,28 @@ export async function preparePrefix(runner: WineRunner, installDir: string, w: W
       : `Installing ${todo.join(', ')} with winetricks… (a few minutes)`
   )
 
-  let installed: string[] = []
   if (runner.kind === 'umu') {
     // umu runs GE-Proton's bundled winetricks: "umu-run winetricks <verbs>".
-    const r = await runInPrefix(runner, prefix, w, ['winetricks', '-q', ...todo], log, 45 * 60_000)
-    if (r.code === 0) installed = todo
+    await runInPrefix(runner, prefix, w, ['winetricks', '-q', ...todo], log, 45 * 60_000)
   } else {
     const wt = await winetricksPath(onStatus)
-    if (wt) {
-      const r = await run(wt, ['-q', '--unattended', ...todo], baseEnv(runner, prefix, w), { timeoutMs: 45 * 60_000, log })
-      if (r.code === 0) installed = todo
-    }
+    if (wt) await run(wt, ['-q', '--unattended', ...todo], baseEnv(runner, prefix, w), { timeoutMs: 45 * 60_000, log })
   }
 
-  if (installed.length < todo.length) {
-    const rest = todo.filter((v) => !installed.includes(v))
-    installed.push(...(await fallbackSetup(runner, prefix, w, rest, log, onStatus)))
+  // Check what actually landed in the prefix; retry what's missing the direct way.
+  const rest = todo.filter((v) => !verifyComponent(prefix, v))
+  if (rest.length) {
+    appendFileSync(log, `\n# not installed after winetricks: ${rest.join(', ')}; trying the direct way\n`)
+    await fallbackSetup(runner, prefix, w, rest, log, onStatus)
   }
-  if (installed.length) markDone(prefix, installed)
+  const nowDone = saveDone(prefix)
+  const missing = todo.filter((v) => !nowDone.includes(v))
+  appendFileSync(log, `\n# installed: ${nowDone.join(', ') || 'nothing'}${missing.length ? `; missing: ${missing.join(', ')}` : ''}\n`)
 
-  const missing = todo.filter((v) => !installed.includes(v))
-  if (missing.includes('win10') && firstTime && runner.kind === 'umu' && !existsSync(join(prefix, 'system.reg'))) {
+  if (missing.includes('vcrun2022')) {
+    return `The Visual C++ runtime couldn't be installed into the Wine prefix, and the game can't start without it. See ${log}, or try "Recreate Linux environment" in Settings → Linux.`
+  }
+  if (missing.includes('win10') && firstTime && runner.kind === 'umu' && !existsSync(join(prefixRoot(prefix), 'system.reg'))) {
     return `The Linux environment couldn't be set up. See ${log}`
   }
   if (missing.length) onStatus(`Couldn't install ${missing.join(', ')} (see wine-setup.log). Starting anyway…`)
@@ -516,7 +586,7 @@ export async function linuxStatus(installDir: string, w: WineSettings): Promise<
     protonInstalled: installedProtons()[0] ?? '',
     umuInstalled: isFile(umuPath()),
     prefix,
-    prefixExists: existsSync(join(prefix, 'system.reg')) || existsSync(join(prefix, 'pfx', 'system.reg')),
+    prefixExists: existsSync(join(prefixRoot(prefix), 'system.reg')),
     componentsDone: doneComponents(prefix),
     runners: await findRunners()
   }

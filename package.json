@@ -1,7 +1,7 @@
 {
   "name": "xi-launcher",
   "productName": "Goomba XI",
-  "version": "0.6.0",
+  "version": "0.6.2",
   "description": "Launcher for a LandSandBoat FFXI private server (Ashita v4 + xiloader)",
   "main": "./out/main/index.js",
   "author": "",

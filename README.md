@@ -203,7 +203,7 @@ The **Addons** page lists what's installed (with on/off checkboxes) and, when yo
 - **`name`**: must match the plugin's `.dll` name or the addon's folder name, since that's what Ashita loads.
 - **`url`**: a zip in one of these layouts (a single wrapper folder is fine):
   - Ashita layout: `plugins/TargetLines.dll`, `addons/<name>/<name>.lua`, `resources/…`, `docs/…`, merged into the player's `Ashita/` folder.
-  - Plugin: `TargetLines.dll` at the top, with any other folders (e.g. `resources/`) merged into `Ashita/`.
+  - Plugin: `TargetLines.dll` anywhere in the zip (up to 5 folders deep), with a `resources/` or `docs/` folder next to it merged into `Ashita/`.
   - Addon: `<name>.lua` at the top, or a `<name>/` folder containing it.
 - **`version`**: bump it to offer an **Update** button. **`sha256`** (recommended) rejects corrupted downloads. **`size`** (bytes) is shown before downloading.
 - **`platforms`**: `["linux"]` or `["windows"]` to offer an item on one OS only (e.g. a Wine fix plugin). Omit for both.

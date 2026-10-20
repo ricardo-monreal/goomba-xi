@@ -28,6 +28,6 @@
     "timestamp"
   ],
   "pivotCatalogUrl": "http://10.2.5.85/launcher/pivot.json",
-  "addonCatalogUrl": "http://10.2.5.85/launcher/addons.json"
+  "addonCatalogUrl": "http://10.2.5.85/launcher/addons.json",
   "requiredOverlays": []
 }
