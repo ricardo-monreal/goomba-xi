@@ -6,6 +6,8 @@ import Settings from './components/Settings'
 
 type Page = 'home' | 'addons' | 'settings'
 
+const THEMES = ['blue', 'slate']
+
 export default function App(): JSX.Element {
   const [state, setState] = useState<AppState | null>(null)
   const [page, setPage] = useState<Page>('home')
@@ -16,6 +18,8 @@ export default function App(): JSX.Element {
       const s = await window.api.getState()
       setState(s)
       document.title = s.config.serverName
+      // Colour theme from launcher.config.json; unknown names keep the default from index.html.
+      if (THEMES.includes(s.config.theme)) document.documentElement.dataset.theme = s.config.theme
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e))
     }

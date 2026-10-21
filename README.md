@@ -30,6 +30,7 @@ Edit `launcher.config.json`:
 | `hairpin` | Pass `--hairpin` to xiloader (only for a home-hosted server you also play on). |
 | `ports` | Optional `auth` / `data` / `view` port overrides if you changed LSB's defaults (54231 / 54230 / 54001). |
 | `requiredPlugins`, `defaultPlugins`, `requiredAddons`, `defaultAddons` | Addon policy. Required ones can't be turned off. |
+| `theme` | Colour theme: `"slate"` (default; #F1F6F9 · #9BA4B5 · #394867 · #212A3E) or `"blue"` (#F9F7F7 · #DBE2EF · #3F72AF · #112D4E). The colours are in `src/renderer/src/themes/<theme>.css`; to add one, copy a file, change the colours and the name in `:root[data-theme='…']`, add an `@import` for it at the top of `styles.css`, and add the name to `THEMES` in `App.tsx`. |
 | `addonCatalogUrl` | URL of an `addons.json` listing optional addons and plugins players can install (see "Addon and plugin catalog"). Empty shows only what ships with the client. |
 | `linux` | Optional Linux runtime overrides: `protonVersion` (e.g. `"GE-Proton10-25"` to pin a version; empty = latest), `protonUrl` and `umuUrl` (host the GE-Proton `.tar.gz` and umu-launcher zipapp yourself, e.g. on your LAN file server). |
 | `pivotCatalogUrl` | URL of a `pivot.json` listing optional HD/DAT packs (see "Pivot: HD packs"). Empty hides the catalog. |

@@ -41,6 +41,7 @@ export function loadLauncherConfig(): LauncherConfig {
     registerUrl: '',
     accountUrl: '',
     addonCatalogUrl: '',
+    theme: 'slate',
     ...raw,
     linux: { protonVersion: '', protonUrl: '', umuUrl: '', ...(raw.linux ?? {}) }
   }

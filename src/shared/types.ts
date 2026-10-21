@@ -45,6 +45,8 @@ export interface LauncherConfig {
   accountUrl: string
   /** URL of an addons.json catalog of extra addons/plugins players can install. Empty string hides "Available". */
   addonCatalogUrl: string
+  /** Colour theme: "blue" or "slate" (files in src/renderer/src/themes). */
+  theme: string
   /** Linux only: the managed GE-Proton runtime. */
   linux: LinuxConfig
 }
